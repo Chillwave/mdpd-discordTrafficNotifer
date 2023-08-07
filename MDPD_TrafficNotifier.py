@@ -114,27 +114,41 @@ async def broadcast_traffic_data():
     global latest_timestamp
 
     while True:
+        print(f"[DEBUG] Current channel preferences: {channel_preferences}")
+        
+        # Fetch traffic data outside the channels loop
+        traffic_data = fetch_traffic_data()
+        # Filter for new alerts based on timestamp
+        new_alerts = [alert for alert in traffic_data if datetime.fromisoformat(alert['CreateTime']) > latest_timestamp]
+        
+        # Debug: Print out timestamps of new alerts
+        for alert in new_alerts:
+            print(f"[DEBUG] New Alert Timestamp: {alert['CreateTime']}")
+
+        sent_successfully = []  # Track if we successfully sent the alerts
         for guild_id, channel_id in channel_preferences.items():
             channel = client.get_channel(channel_id)
             if channel:
-                traffic_data = fetch_traffic_data()
-
-                # Filter for new alerts based on timestamp
-                new_alerts = [alert for alert in traffic_data if datetime.fromisoformat(alert['CreateTime']) > latest_timestamp]
-
                 if new_alerts:
-                    print(f"Sending traffic data to channel: {channel.name} ({channel.id})")
-
-                    # Update the latest timestamp
-                    latest_timestamp = max(datetime.fromisoformat(alert['CreateTime']) for alert in new_alerts)
-
+                    print(f"[DEBUG] Sending traffic data to channel: {channel.name} ({channel.id})")
                     for message in print_traffic_data(new_alerts):
                         await channel.send(message)
                         print(f"Sent message: {message}")
-                    
-                    print("Traffic data sent successfully")
+
+                    sent_successfully.append(True)
+                    print("Traffic data sent successfully for channel.")
                 else:
-                    print("No new traffic data to send.")
+                    print(f"No new traffic data to send for channel: {channel.name} ({channel.id})")
+                    sent_successfully.append(False)
+            else:
+                print(f"Failed to find channel with ID: {channel_id} for server {guild_id}")
+
+        # If we successfully sent new alerts to all channels, then update the latest timestamp
+        if all(sent_successfully) and new_alerts:
+            print(f"[DEBUG] Old Latest Timestamp: {latest_timestamp}")  # Debug
+            latest_timestamp = max(datetime.fromisoformat(alert['CreateTime']) for alert in new_alerts)
+            print(f"[DEBUG] New Latest Timestamp: {latest_timestamp}")  # Debug
+
         print(f"Next probe in {PROBE_INTERVAL} seconds...")
         await asyncio.sleep(PROBE_INTERVAL)
 
